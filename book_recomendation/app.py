@@ -155,7 +155,7 @@ if st.button("Cari Rekomendasi"):
     st.dataframe(
         top_books[
             [
-                "relevance_probability",
+                "relevance",
                 "title",
                 "author",
                 "genre"
