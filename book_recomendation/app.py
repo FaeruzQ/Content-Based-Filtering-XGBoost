@@ -148,9 +148,9 @@ if st.button("Cari Rekomendasi"):
     top_books = df_result.sort_values(
         by="relevance_probability",
         ascending=False
-    ).head(10)
+    ).head(20)
 
-    st.subheader("Top 10 Rekomendasi Buku")
+    st.subheader("Rekomendasi Buku")
 
     st.dataframe(
         top_books[
