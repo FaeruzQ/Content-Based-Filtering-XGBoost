@@ -12,7 +12,7 @@ from xgboost import XGBClassifier
 # LOAD DATA
 # =========================
 
-df = pd.read_csv("Books.csv")
+df = pd.read_csv("./Books.csv")
 
 # =========================
 # PREPROCESSING
