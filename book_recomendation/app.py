@@ -160,5 +160,6 @@ if st.button("Cari Rekomendasi"):
                 "author",
                 "genre"
             ]
-        ]
+        ],
+        use_container_width=True
     )
