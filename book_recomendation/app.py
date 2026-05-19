@@ -1,56 +1,3 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from scipy.sparse import hstack
-from xgboost import XGBClassifier
-
-# =========================
-# LOAD DATA
-# =========================
-df = pd.read_csv("Books.csv")
-
-# =========================
-# PREPROCESSING
-# =========================
-df.columns = df.columns.str.lower()
-df = df[['title','author','genre','description']].dropna()
-df.drop_duplicates(inplace=True)
-
-placeholders = ['no description available', 'unknown', 'n/a']
-mask = df['description'].str.lower().str.strip().isin(placeholders)
-df = df[~mask].reset_index(drop=True)
-
-df['word_count'] = df['description'].apply(
-    lambda x: len(str(x).split())
-)
-df = df[df['word_count'] >= 10]
-
-# =========================
-# FEATURE ENGINEERING
-# =========================
-df["combined_text"] = (
-    df["title"].astype(str) + " " +
-    df["author"].astype(str) + " " +
-    df["genre"].astype(str) + " " +
-    df["description"].astype(str)
-)
-
-tfidf = TfidfVectorizer(stop_words="english", max_features=5000)
-tfidf_matrix = tfidf.fit_transform(df["combined_text"])
-
-# =========================
-# PSEUDO LABELING FUNCTION
-# =========================
-def create_labels_topk(sim_scores, k=0.2):
-    n = len(sim_scores)
-    top_k = int(n * k)
-    idx = np.argsort(sim_scores)[-top_k:]
-    labels = np.zeros(n)
-    labels[idx] = 1
-    return labels
-
 # =========================
 # STREAMLIT UI
 # =========================
@@ -71,44 +18,53 @@ if st.button("Cari Rekomendasi"):
                 query_vec, tfidf_matrix
             ).flatten()
 
-            # Buat label berdasarkan query
-            y = create_labels_topk(sim_scores, k=0.2)
+            # =====================================================================
+            # PERUBAHAN UTAMA: VALIDASI KUERI ASAL-ASALAN (OUT-OF-DISTRIBUTION)
+            # =====================================================================
+            if np.max(sim_scores) == 0:
+                st.error(f"Maaf, kata kunci '{query}' tidak ditemukan atau tidak relevan dengan koleksi buku kami.")
+                st.info("Coba masukkan kata kunci lain seperti genre, nama penulis, atau judul spesifik.")
+            # =====================================================================
+            else:
+                # Jika ada minimal satu kecocokan kata (similarity > 0), lanjutkan proses XGBoost
+                # Buat label berdasarkan query
+                y = create_labels_topk(sim_scores, k=0.2)
 
-            # Gabungkan fitur TF-IDF + cosine similarity
-            X_features = hstack([
-                tfidf_matrix,
-                sim_scores.reshape(-1, 1)
-            ])
+                # Gabungkan fitur TF-IDF + cosine similarity
+                X_features = hstack([
+                    tfidf_matrix,
+                    sim_scores.reshape(-1, 1)
+                ])
 
-            # Latih model untuk query ini
-            model = XGBClassifier(
-                random_state=42,
-                n_estimators=100,
-                eval_metric='logloss'
-            )
-            model.fit(X_features, y)
+                # Latih model untuk query ini
+                model = XGBClassifier(
+                    random_state=42,
+                    n_estimators=100,
+                    eval_metric='logloss'
+                )
+                model.fit(X_features, y)
 
-            # Prediksi relevansi
-            relevance_probabilities = model.predict_proba(
-                X_features
-            )[:, 1]
+                # Prediksi relevansi
+                relevance_probabilities = model.predict_proba(
+                    X_features
+                )[:, 1]
 
-            # Tampilkan hasil
-            df_result = df.copy()
-            df_result["similarity"] = sim_scores
-            df_result["relevance_probability"] = relevance_probabilities
+                # Tampilkan hasil
+                df_result = df.copy()
+                df_result["similarity"] = sim_scores
+                df_result["relevance_probability"] = relevance_probabilities
 
-            top_books = df_result.sort_values(
-                by="relevance_probability",
-                ascending=False
-            ).head(20)
+                top_books = df_result.sort_values(
+                    by="relevance_probability",
+                    ascending=False
+                ).head(20)
 
-            st.subheader(f"Rekomendasi untuk: '{query}'")
-            st.dataframe(
-                top_books[[
-                    "relevance_probability",
-                    "title",
-                    "author",
-                    "genre"
-                ]]
-            )
+                st.subheader(f"Rekomendasi untuk: '{query}'")
+                st.dataframe(
+                    top_books[[
+                        "relevance_probability",
+                        "title",
+                        "author",
+                        "genre"
+                    ]]
+                )
